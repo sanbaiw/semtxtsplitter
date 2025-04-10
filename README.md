@@ -12,13 +12,13 @@ A Go package for intelligently splitting text into chunks while preserving seman
 ## Installation
 
 ```bash
-go get github.com/semtextsplitter
+go get github.com/sanbaiw/semtxtsplitter
 ```
 
 ## Usage
 
 ```go
-import "github.com/semtextsplitter"
+import "github.com/sanbaiw/semtxtsplitter"
 
 // Create a text splitter with chunk size of 1000 and 10% overlap
 splitter, err := semchunk.NewTextSplitter(1000, 0.1, yourTokenCounter)
