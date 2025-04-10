@@ -6,20 +6,15 @@ import (
 	"strings"
 )
 
-// TokenCounter is an interface that defines how to count tokens in a text
-type TokenCounter interface {
-	CountTokens(text string) int
-}
-
 // TextSplitter handles the semantic chunking of text
 type TextSplitter struct {
-	chunkSize    int
-	tokenCounter TokenCounter
-	overlap      int
+	chunkSize      int
+	countTokenFunc func(text string) int
+	overlap        int
 }
 
 // NewTextSplitter creates a new TextSplitter instance
-func NewTextSplitter[K int | float32](chunkSize int, overlap K, tokenCounter TokenCounter) (*TextSplitter, error) {
+func NewTextSplitter[K int | float32](chunkSize int, overlap K, countTokenFunc func(text string) int) (*TextSplitter, error) {
 	var overlapInt int
 	if overlapFloat, ok := any(overlap).(float32); ok {
 		if overlapFloat < 0 || overlapFloat > 1 {
@@ -33,9 +28,9 @@ func NewTextSplitter[K int | float32](chunkSize int, overlap K, tokenCounter Tok
 	}
 
 	return &TextSplitter{
-		chunkSize:    chunkSize,
-		tokenCounter: tokenCounter,
-		overlap:      overlapInt,
+		chunkSize:      chunkSize,
+		countTokenFunc: countTokenFunc,
+		overlap:        overlapInt,
 	}, nil
 }
 
@@ -142,7 +137,7 @@ func nextSize(size int, splitLen int, splitterLen int, appendSplit bool) int {
 func (c *TextSplitter) mergeSplits(splits []string, splitLens []int, splitIds []int, splitter string, chunkSize int) []string {
 	merges := make([]string, 0)
 	toMerge := make([]string, 0)
-	splitterLen := c.tokenCounter.CountTokens(splitter)
+	splitterLen := c.countTokenFunc(splitter)
 
 	size := 0
 	for i, split := range splits {
@@ -194,7 +189,7 @@ func (c *TextSplitter) split(text string, chunkSize int, recursionDepth int) []s
 	goodSplitIds := make([]int, 0)
 
 	for i, split := range splits {
-		l := c.tokenCounter.CountTokens(split)
+		l := c.countTokenFunc(split)
 		if l < chunkSize {
 			goodSplits = append(goodSplits, split)
 			goodSplitLens = append(goodSplitLens, l)

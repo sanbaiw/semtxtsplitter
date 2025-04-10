@@ -65,13 +65,6 @@ func TestInnerSplit(t *testing.T) {
 	}
 }
 
-// MockTokenCounter implements TokenCounter for testing
-type MockTokenCounter struct{}
-
-func (m *MockTokenCounter) CountTokens(text string) int {
-	return len(text)
-}
-
 func TestMergeSplits(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -148,9 +141,9 @@ func TestMergeSplits(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			splitter := &TextSplitter{
-				chunkSize:    tt.chunkSize,
-				tokenCounter: &MockTokenCounter{},
-				overlap:      tt.overlap,
+				chunkSize:      tt.chunkSize,
+				countTokenFunc: func(text string) int { return len(text) },
+				overlap:        tt.overlap,
 			}
 
 			got := splitter.mergeSplits(tt.splits, tt.splitLens, tt.splitIds, tt.splitter, tt.chunkSize)
@@ -196,9 +189,12 @@ func TestSplit(t *testing.T) {
 
 		t.Run(tt.name, func(t *testing.T) {
 			splitter := &TextSplitter{
-				chunkSize:    tt.chunkSize,
-				tokenCounter: NewSimpleTokenCounter(2),
-				overlap:      tt.overlap,
+				chunkSize: tt.chunkSize,
+				countTokenFunc: func(text string) int {
+					words := strings.Fields(text)
+					return len(words) * 2
+				},
+				overlap: tt.overlap,
 			}
 
 			got := splitter.Split(tt.text)
