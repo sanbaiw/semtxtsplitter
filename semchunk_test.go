@@ -1,6 +1,7 @@
 package semchunk
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 
@@ -56,7 +57,7 @@ func TestInnerSplit(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			splitter, isWhitespace, splits := innerSplit(tt.text)
+			splitter, isWhitespace, splits := innerSplit(tt.text, nil)
 
 			assert.Equal(t, tt.splitter, splitter, "%s splitter mismatch", tt.name)
 			assert.Equal(t, tt.isWhitespace, isWhitespace, "%s isWhitespace mismatch", tt.name)
@@ -195,6 +196,7 @@ func TestSplit(t *testing.T) {
 					return len(words) * 2
 				},
 				overlap: tt.overlap,
+				opts:    &TextSplitterOption{},
 			}
 
 			got := splitter.Split(tt.text)
@@ -202,4 +204,47 @@ func TestSplit(t *testing.T) {
 			assert.Equal(t, tt.want, got, "case: %q got mismatch", tt.name)
 		})
 	}
+}
+
+func TestInnerSplitWithPreserveURLs(t *testing.T) {
+	tests := []struct {
+		name         string
+		text         string
+		splitter     string
+		isWhitespace bool
+		want         []string
+	}{
+		{
+			name:         "sentence with url",
+			text:         "想要与 Claude 聊天？请访问 https://docs.anthropic.com/zh-CN/docs/welcome 如果你是 Claude 新手，从这里开始学习基础知识并进行首次 API 调用。",
+			want:         []string{"想要与 Claude 聊天？请访问 ", "https://docs.anthropic.com/zh-CN/docs/welcome", " 如果你是 Claude 新手，从这里开始学习基础知识并进行首次 API 调用。"},
+			splitter:     "",
+			isWhitespace: true,
+		},
+		{
+			name:         "sentence with starting url",
+			text:         "https://docs.anthropic.com/zh-CN/docs/welcome 如果你是 Claude 新手，从这里开始学习基础知识并进行首次 API 调用。",
+			want:         []string{"https://docs.anthropic.com/zh-CN/docs/welcome", " 如果你是 Claude 新手，从这里开始学习基础知识并进行首次 API 调用。"},
+			splitter:     "",
+			isWhitespace: true,
+		},
+		{
+			name:         "sentence with ending url",
+			text:         "如果你是 Claude 新手，从这里开始学习基础知识并进行首次 API 调用。https://docs.anthropic.com/zh-CN/docs/welcome",
+			want:         []string{"如果你是 Claude 新手，从这里开始学习基础知识并进行首次 API 调用。", "https://docs.anthropic.com/zh-CN/docs/welcome"},
+			splitter:     "",
+			isWhitespace: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			splitter, isWhitespace, splits := innerSplit(tt.text, []*regexp.Regexp{urlRegex})
+
+			assert.Equal(t, tt.splitter, splitter, "%s splitter mismatch", tt.name)
+			assert.Equal(t, tt.isWhitespace, isWhitespace, "%s isWhitespace mismatch", tt.name)
+			assert.Equal(t, tt.want, splits, "%s splits mismatch", tt.name)
+		})
+	}
+
 }

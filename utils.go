@@ -60,6 +60,13 @@ func IsChinese(text string) bool {
 	return totalCount > 0 && float64(chineseCount)/float64(totalCount) > 0.4
 }
 
+func GuessIsChinese(text string, n int) bool {
+	if n > len(text) || n <= 0 {
+		n = len(text)
+	}
+	return IsChinese(text[:n])
+}
+
 func ContainsSpace(text string) bool {
 	for _, r := range text {
 		if unicode.IsSpace(r) {

@@ -11,10 +11,38 @@ type TextSplitter struct {
 	chunkSize      int
 	countTokenFunc func(text string) int
 	overlap        int
+	opts           *TextSplitterOption
+}
+
+type TextSplitterOption struct {
+	PreserveURLs     bool
+	PreservePatterns []*regexp.Regexp
+}
+
+func WithPreserveURLs(preserveURLs bool) func(*TextSplitterOption) {
+	return func(opts *TextSplitterOption) {
+		if opts == nil {
+			opts = &TextSplitterOption{}
+		}
+		opts.PreserveURLs = preserveURLs
+		opts.PreservePatterns = append(opts.PreservePatterns, urlRegex)
+	}
+}
+
+func WithPreservePatterns(preservePatterns ...string) func(*TextSplitterOption) {
+	return func(opts *TextSplitterOption) {
+		if opts == nil {
+			opts = &TextSplitterOption{}
+		}
+		for _, pattern := range preservePatterns {
+			escapedPattern := regexp.QuoteMeta(pattern)
+			opts.PreservePatterns = append(opts.PreservePatterns, regexp.MustCompile(escapedPattern))
+		}
+	}
 }
 
 // NewTextSplitter creates a new TextSplitter instance
-func NewTextSplitter[K int | float32](chunkSize int, overlap K, countTokenFunc func(text string) int) (*TextSplitter, error) {
+func NewTextSplitter[K int | float32](chunkSize int, overlap K, countTokenFunc func(text string) int, opts ...func(*TextSplitterOption)) (*TextSplitter, error) {
 	var overlapInt int
 	if overlapFloat, ok := any(overlap).(float32); ok {
 		if overlapFloat < 0 || overlapFloat > 1 {
@@ -27,13 +55,21 @@ func NewTextSplitter[K int | float32](chunkSize int, overlap K, countTokenFunc f
 		}
 	}
 
-	return &TextSplitter{
+	ts := &TextSplitter{
 		chunkSize:      chunkSize,
 		countTokenFunc: countTokenFunc,
 		overlap:        overlapInt,
-	}, nil
+		opts:           &TextSplitterOption{},
+	}
+
+	for _, opt := range opts {
+		opt(ts.opts)
+	}
+
+	return ts, nil
 }
 
+var urlRegex = regexp.MustCompile(`(https?|ftp|file|www)(:|.)(//)?[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]`)
 var whitespaceRegex = regexp.MustCompile(`\s+`)
 var sentenceTerminators = []string{
 	"。", "？", "！", ".", "?", "!",
@@ -46,7 +82,7 @@ var clauseSeparators = []string{
 // nonWhitespaceSemanticSplitters defines the splitters in order of preference
 var nonWhitespaceSemanticSplitters = append(sentenceTerminators, clauseSeparators...)
 
-func longest(splitters []string) string {
+func longestSplitter(splitters []string) string {
 	if len(splitters) == 0 {
 		return ""
 	}
@@ -61,7 +97,7 @@ func longest(splitters []string) string {
 }
 
 // innerSplit splits text using the most semantically meaningful splitter possible
-func innerSplit(text string) (string, bool, []string) {
+func innerSplit(text string, preservePatterns []*regexp.Regexp) (string, bool, []string) {
 	splitterIsWhitespace := true
 
 	// Try splitting at newlines
@@ -70,7 +106,7 @@ func innerSplit(text string) (string, bool, []string) {
 		matches := re.FindAllString(text, -1)
 		if len(matches) > 0 {
 			// Find the longest consecutive newlines
-			splitter := longest(matches)
+			splitter := longestSplitter(matches)
 			return splitter, splitterIsWhitespace, strings.Split(text, splitter)
 		}
 	}
@@ -80,36 +116,61 @@ func innerSplit(text string) (string, bool, []string) {
 		re := regexp.MustCompile(`\t+`)
 		matches := re.FindAllString(text, -1)
 		if len(matches) > 0 {
-			splitter := longest(matches)
+			splitter := longestSplitter(matches)
 			return splitter, splitterIsWhitespace, strings.Split(text, splitter)
+		}
+	}
+
+	// Check preserve patterns if they exist
+	// if any of the preservePatterns are found, split around them to keep the pattern intact
+	for _, pattern := range preservePatterns {
+		matches := pattern.FindAllStringIndex(text, -1)
+		if len(matches) > 0 {
+			// Split the text while keeping the pattern
+			parts := make([]string, 0)
+			lastIndex := 0
+			for _, match := range matches {
+				start, end := match[0], match[1]
+
+				// Add the text before the pattern
+				if start > lastIndex {
+					parts = append(parts, text[lastIndex:start])
+				}
+
+				// Add the pattern itself
+				parts = append(parts, text[start:end])
+
+				lastIndex = end
+			}
+
+			// Add any remaining text
+			if lastIndex < len(text) {
+				parts = append(parts, text[lastIndex:])
+			}
+
+			return "", splitterIsWhitespace, parts
 		}
 	}
 
 	// Try splitting at whitespace
 	if ContainsSpace(text) {
-		n := 200
-		if n > len(text) {
-			n = len(text)
-		}
-		if !IsChinese(text[:n]) {
-			matches := whitespaceRegex.FindAllString(text, -1)
-			if len(matches) > 0 {
-				splitter := longest(matches)
+		matches := whitespaceRegex.FindAllString(text, -1)
+		if len(matches) > 0 {
+			splitter := longestSplitter(matches)
 
-				// If splitter is single character, try to find whitespace preceded by semantic splitters
-				if len(splitter) == 1 {
-					for _, preceder := range nonWhitespaceSemanticSplitters {
-						escapedPreceder := regexp.QuoteMeta(preceder)
-						re := regexp.MustCompile(escapedPreceder + `(\s)`)
-						if matches := re.FindStringSubmatch(text); matches != nil {
-							splitter = matches[1]
-							parts := LookbehindSplit(text, preceder, splitter)
-							return splitter, splitterIsWhitespace, parts
-						}
+			// If splitter is single character, try to find whitespace preceded by semantic splitters
+			if len(splitter) == 1 {
+				for _, preceder := range nonWhitespaceSemanticSplitters {
+					escapedPreceder := regexp.QuoteMeta(preceder)
+					re := regexp.MustCompile(escapedPreceder + `(\s)`)
+					if matches := re.FindStringSubmatch(text); matches != nil {
+						splitter = matches[1]
+						parts := LookbehindSplit(text, preceder, splitter)
+						return splitter, splitterIsWhitespace, parts
 					}
 				}
-				return splitter, splitterIsWhitespace, strings.Split(text, splitter)
 			}
+			return splitter, splitterIsWhitespace, strings.Split(text, splitter)
 		}
 	}
 
@@ -182,7 +243,7 @@ func (c *TextSplitter) mergeSplits(splits []string, splitLens []int, splitIds []
 func (c *TextSplitter) split(text string, chunkSize int, recursionDepth int) []string {
 	rets := make([]string, 0)
 
-	splitter, _, splits := innerSplit(text)
+	splitter, _, splits := innerSplit(text, c.opts.PreservePatterns)
 
 	goodSplits := make([]string, 0)
 	goodSplitLens := make([]int, 0)
