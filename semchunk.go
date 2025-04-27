@@ -71,16 +71,24 @@ func NewTextSplitter[K int | float32](chunkSize int, overlap K, countTokenFunc f
 
 var urlRegex = regexp.MustCompile(`(https?|ftp|file|www)(:|.)(//)?[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]`)
 var whitespaceRegex = regexp.MustCompile(`\s+`)
+var fullWidthSentenceTerminators = []string{
+	"。", "？", "！",
+}
+var fullWidthClauseSparators = []string{
+	"，", "；", "、", "：", "－",
+}
+
 var sentenceTerminators = []string{
-	"。", "？", "！", ".", "?", "!",
+	".", "?", "!",
 }
 
 var clauseSeparators = []string{
-	"，", "；", "：", "—", "－", "…", ",", ";", ":",
+	"—", "…", ",", ";", ":",
 }
 
 // nonWhitespaceSemanticSplitters defines the splitters in order of preference
 var nonWhitespaceSemanticSplitters = append(sentenceTerminators, clauseSeparators...)
+var fullWidthNonWhitespaceSemanticSpliters = append(fullWidthSentenceTerminators, fullWidthClauseSparators...)
 
 func longestSplitter(splitters []string) string {
 	if len(splitters) == 0 {
@@ -152,6 +160,13 @@ func innerSplit(text string, preservePatterns []*regexp.Regexp) (string, bool, [
 		}
 	}
 
+	for _, splitter := range fullWidthNonWhitespaceSemanticSpliters {
+		if strings.Contains(text, splitter) {
+			splitterIsWhitespace = false
+			return splitter, splitterIsWhitespace, strings.Split(text, splitter)
+		}
+	}
+
 	// Try splitting at whitespace
 	if ContainsSpace(text) {
 		matches := whitespaceRegex.FindAllString(text, -1)
@@ -170,6 +185,7 @@ func innerSplit(text string, preservePatterns []*regexp.Regexp) (string, bool, [
 					}
 				}
 			}
+
 			return splitter, splitterIsWhitespace, strings.Split(text, splitter)
 		}
 	}
