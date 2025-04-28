@@ -211,11 +211,12 @@ func estimateSize(size int, splitSize int, splitterSize int, appendSplitter bool
 }
 
 // mergeSplits merges splits until a chunk size is reached
-func (c *TextSplitter) mergeSplits(splits []string, splitSizes []int, splitIds []int, splitter string, chunkSize int) []string {
-	merges := make([]string, 0)
+func (c *TextSplitter) mergeSplits(splits []string, splitSizes []int, splitter string, chunkSize int) []string {
+	result := make([]string, 0)
 	toMerge := make([]string, 0)
 	splitterSize := c.countTokenFunc(splitter)
 
+	windowStart := 0
 	size := 0
 	for i, split := range splits {
 		l := splitSizes[i]
@@ -223,20 +224,23 @@ func (c *TextSplitter) mergeSplits(splits []string, splitSizes []int, splitIds [
 		if estimateSize(size, l, splitterSize, len(toMerge) > 0) > chunkSize {
 			merged := strings.Join(toMerge, splitter)
 			if len(merged) > 0 {
-				merges = append(merges, merged)
+				result = append(result, merged)
 			}
 
 			if c.overlap > 0 {
 				// keeps popping from the front of toMerge until the size is less than the overlap
-				for size > c.overlap || estimateSize(size, l, splitterSize, len(toMerge) > 0) > chunkSize && size > 0 {
-					size -= splitSizes[splitIds[0]]
+				for size > c.overlap ||
+					(estimateSize(size, l, splitterSize, len(toMerge) > 0) > chunkSize && size > 0) {
+					size -= splitSizes[windowStart]
 					if len(toMerge) > 1 {
 						size -= splitterSize
 					}
+					windowStart++
 					toMerge = toMerge[1:]
-					splitIds = splitIds[1:]
+
 				}
 			} else {
+				windowStart = i
 				toMerge = make([]string, 0)
 				size = 0
 			}
@@ -252,11 +256,11 @@ func (c *TextSplitter) mergeSplits(splits []string, splitSizes []int, splitIds [
 	if len(toMerge) > 0 {
 		merged := strings.Join(toMerge, splitter)
 		if len(merged) > 0 {
-			merges = append(merges, merged)
+			result = append(result, merged)
 		}
 	}
 
-	return merges
+	return result
 }
 
 func (c *TextSplitter) split(text string, chunkSize int, recursionDepth int) []string {
@@ -266,23 +270,20 @@ func (c *TextSplitter) split(text string, chunkSize int, recursionDepth int) []s
 
 	goodSplits := make([]string, 0)
 	goodSplitSizes := make([]int, 0)
-	goodSplitIds := make([]int, 0)
 
-	for i, split := range splits {
+	for _, split := range splits {
 		l := c.countTokenFunc(split)
 		if l < chunkSize {
 			goodSplits = append(goodSplits, split)
 			goodSplitSizes = append(goodSplitSizes, l)
-			goodSplitIds = append(goodSplitIds, i)
 			continue
 		}
 		if len(goodSplits) > 0 {
-			merges := c.mergeSplits(goodSplits, goodSplitSizes, goodSplitIds, splitter, chunkSize)
+			merges := c.mergeSplits(goodSplits, goodSplitSizes, splitter, chunkSize)
 
 			rets = append(rets, merges...)
 			goodSplits = make([]string, 0)
 			goodSplitSizes = make([]int, 0)
-			goodSplitIds = make([]int, 0)
 		}
 
 		newSplits := c.split(split, chunkSize, recursionDepth+1)
@@ -290,7 +291,7 @@ func (c *TextSplitter) split(text string, chunkSize int, recursionDepth int) []s
 	}
 
 	if len(goodSplits) > 0 {
-		merges := c.mergeSplits(goodSplits, goodSplitSizes, goodSplitIds, splitter, chunkSize)
+		merges := c.mergeSplits(goodSplits, goodSplitSizes, splitter, chunkSize)
 		rets = append(rets, merges...)
 	}
 

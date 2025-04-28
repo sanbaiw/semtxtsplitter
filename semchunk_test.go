@@ -81,7 +81,6 @@ func TestMergeSplits(t *testing.T) {
 			name:      "basic merge without overlap",
 			splits:    []string{"hello", "world", "test"},
 			splitLens: []int{5, 5, 4},
-			splitIds:  []int{0, 1, 2},
 			splitter:  " ",
 			chunkSize: 10,
 			overlap:   0,
@@ -91,7 +90,6 @@ func TestMergeSplits(t *testing.T) {
 			name:      "basic merge without overlap #2",
 			splits:    []string{"hello", "world", "test"},
 			splitLens: []int{5, 5, 4},
-			splitIds:  []int{0, 1, 2},
 			splitter:  " ",
 			chunkSize: 11,
 			overlap:   0,
@@ -101,7 +99,6 @@ func TestMergeSplits(t *testing.T) {
 			name:      "merge with overlap",
 			splits:    []string{"hello", "world", "test", "again"},
 			splitLens: []int{5, 5, 4, 5},
-			splitIds:  []int{0, 1, 2, 3},
 			splitter:  " ",
 			chunkSize: 11,
 			overlap:   5,
@@ -111,7 +108,6 @@ func TestMergeSplits(t *testing.T) {
 			name:      "single split exceeding chunk size",
 			splits:    []string{"thisisaverylongword"},
 			splitLens: []int{18},
-			splitIds:  []int{0},
 			splitter:  " ",
 			chunkSize: 10,
 			overlap:   0,
@@ -121,7 +117,6 @@ func TestMergeSplits(t *testing.T) {
 			name:      "empty splits",
 			splits:    []string{},
 			splitLens: []int{},
-			splitIds:  []int{},
 			splitter:  " ",
 			chunkSize: 10,
 			overlap:   0,
@@ -131,7 +126,6 @@ func TestMergeSplits(t *testing.T) {
 			name:      "chinese text with overlap",
 			splits:    []string{"你好", "世界", "测试"},
 			splitLens: []int{2, 2, 2},
-			splitIds:  []int{0, 1, 2},
 			splitter:  "",
 			chunkSize: 4,
 			overlap:   2,
@@ -147,7 +141,7 @@ func TestMergeSplits(t *testing.T) {
 				overlap:        tt.overlap,
 			}
 
-			got := splitter.mergeSplits(tt.splits, tt.splitLens, tt.splitIds, tt.splitter, tt.chunkSize)
+			got := splitter.mergeSplits(tt.splits, tt.splitLens, tt.splitter, tt.chunkSize)
 
 			assert.Equal(t, len(tt.want), len(got), "case: %q got length mismatch", tt.name)
 			assert.Equal(t, tt.want, got, "case: %q got mismatch", tt.name)
